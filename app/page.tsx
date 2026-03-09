@@ -182,7 +182,14 @@ export default function PathSagePage() {
   }, []);
 
   // ─── Speak via Groq TTS ─────────────────────────────────────────────────
+  const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
+
   const speak = useCallback(async (text: string, onDone?: () => void) => {
+    // Stop previous source node cleanly
+    if (activeSourceRef.current) {
+      try { activeSourceRef.current.stop(); } catch {}
+      activeSourceRef.current = null;
+    }
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.src = '';
@@ -223,44 +230,42 @@ export default function PathSagePage() {
       }
 
       const arrayBuffer = await res.arrayBuffer();
-
-      // Use AudioContext to decode and play — works on Android + iOS
-      try {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        const ctx = audioCtxRef.current || new AudioCtx();
-        audioCtxRef.current = ctx;
-
-        if (ctx.state === 'suspended') await ctx.resume();
-
-        const decoded = await ctx.decodeAudioData(arrayBuffer);
-        const source = ctx.createBufferSource();
-        source.buffer = decoded;
-        source.connect(ctx.destination);
-
-        source.onended = () => {
-          if (callStateRef.current !== 'ended') {
-            if (onDone) onDone(); else startListening();
-          }
-        };
-
-        source.start(0);
-      } catch (decodeErr) {
-        console.error('AudioContext decode failed, trying Audio element:', decodeErr);
-        // Fallback to Audio element
-        const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audioRef.current = audio;
-        audio.onended = () => {
-          URL.revokeObjectURL(url);
-          audioRef.current = null;
-          if (callStateRef.current !== 'ended') {
-            if (onDone) onDone(); else startListening();
-          }
-        };
-        audio.onerror = () => { URL.revokeObjectURL(url); fallback(); };
-        await audio.play();
+      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+        console.error('Empty audio buffer received');
+        fallback();
+        return;
       }
+
+      // Always use AudioContext — works on Android + iOS once unlocked
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioCtx();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') await ctx.resume();
+
+      let decoded: AudioBuffer;
+      try {
+        decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+      } catch (decodeErr) {
+        console.error('decodeAudioData failed:', decodeErr);
+        fallback();
+        return;
+      }
+
+      const source = ctx.createBufferSource();
+      source.buffer = decoded;
+      source.connect(ctx.destination);
+      activeSourceRef.current = source;
+
+      source.onended = () => {
+        activeSourceRef.current = null;
+        if (callStateRef.current !== 'ended') {
+          if (onDone) onDone(); else startListening();
+        }
+      };
+
+      source.start(0);
 
     } catch (err) {
       console.error('TTS fetch error:', err);

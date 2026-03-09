@@ -194,6 +194,7 @@ export default function PathSagePage() {
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const callStateRef = useRef<CallState>('idle');
   const finalTranscriptRef = useRef('');
+  const audioUnlockedRef = useRef(false);
   // Keep ref in sync with state
   useEffect(() => {
     callStateRef.current = callState;
@@ -221,9 +222,24 @@ export default function PathSagePage() {
     };
   }, [callState]);
 
-  // ─── Speech via Groq PlayAI TTS ─────────────────────────────────────────
+  // ─── Speech via Groq Orpheus TTS ────────────────────────────────────────
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Unlock audio on mobile — must be called inside a user gesture (tap)
+  const unlockAudio = useCallback(() => {
+    if (audioUnlockedRef.current) return;
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const buf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
+      setTimeout(() => ctx.close(), 100);
+      audioUnlockedRef.current = true;
+    } catch {}
+  }, []);
 
   const speak = useCallback(async (text: string, onDone?: () => void) => {
     // Stop any playing audio
@@ -235,6 +251,18 @@ export default function PathSagePage() {
     setCallState('speaking');
     setStatusText('Speaking');
 
+    const handleFallback = () => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.92;
+      utterance.onend = () => {
+        if (callStateRef.current !== 'ended') {
+          if (onDone) onDone();
+          else startListening();
+        }
+      };
+      window.speechSynthesis.speak(utterance);
+    };
+
     try {
       const res = await fetch('/api/tts', {
         method: 'POST',
@@ -242,7 +270,11 @@ export default function PathSagePage() {
         body: JSON.stringify({ text }),
       });
 
-      if (!res.ok) throw new Error('TTS failed');
+      if (!res.ok) {
+        console.error('TTS failed with status:', res.status);
+        handleFallback();
+        return;
+      }
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -259,20 +291,23 @@ export default function PathSagePage() {
       };
 
       audio.onended = handleDone;
-      audio.onerror = handleDone;
-      await audio.play();
+      audio.onerror = () => {
+        console.error('Audio playback error, falling back');
+        handleFallback();
+      };
+
+      // Mobile requires explicit user-gesture-unlocked play
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          console.error('audio.play() blocked, falling back');
+          handleFallback();
+        });
+      }
 
     } catch (err) {
-      console.error('TTS error, falling back to browser voice:', err);
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.92;
-      utterance.onend = () => {
-        if (callStateRef.current !== 'ended') {
-          if (onDone) onDone();
-          else startListening();
-        }
-      };
-      window.speechSynthesis.speak(utterance);
+      console.error('TTS error, falling back:', err);
+      handleFallback();
     }
   }, []);
 
@@ -426,6 +461,9 @@ export default function PathSagePage() {
 
   const startCall = useCallback(() => {
     if (callState !== 'idle') return;
+
+    // Unlock audio on mobile — must happen inside tap gesture
+    unlockAudio();
 
     setCallState('ringing');
     setCallDuration(0);

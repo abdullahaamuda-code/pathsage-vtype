@@ -8,8 +8,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No text provided' }, { status: 400 });
     }
 
-    // Orpheus v1 has 200 char limit per request
-    const input = text.slice(0, 195);
+    // Add vocal direction for warmth + keep under 200 char limit
+    const directed = `[cheerful] ${text}`.slice(0, 195);
 
     const res = await fetch('https://api.groq.com/openai/v1/audio/speech', {
       method: 'POST',
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: 'canopylabs/orpheus-v1-english',
-        input,
+        input: directed,
         voice: 'hannah',
         response_format: 'wav',
       }),

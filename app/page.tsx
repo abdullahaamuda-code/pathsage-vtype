@@ -194,8 +194,6 @@ export default function PathSagePage() {
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const callStateRef = useRef<CallState>('idle');
   const finalTranscriptRef = useRef('');
-  const voicesLoadedRef = useRef(false);
-
   // Keep ref in sync with state
   useEffect(() => {
     callStateRef.current = callState;
@@ -223,65 +221,59 @@ export default function PathSagePage() {
     };
   }, [callState]);
 
-  // Preload voices
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const loadVoices = () => {
-      window.speechSynthesis.getVoices();
-      voicesLoadedRef.current = true;
-    };
-    if (window.speechSynthesis.onvoiceschanged !== undefined) {
-      window.speechSynthesis.onvoiceschanged = loadVoices;
+  // ─── Speech via Groq PlayAI TTS ─────────────────────────────────────────
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const speak = useCallback(async (text: string, onDone?: () => void) => {
+    // Stop any playing audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
     }
-    loadVoices();
-  }, []);
 
-  // ─── Speech synthesis ───────────────────────────────────────────────────
+    setCallState('speaking');
+    setStatusText('Speaking');
 
-  const speak = useCallback((text: string, onDone?: () => void) => {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
 
-    const voices = window.speechSynthesis.getVoices();
-    const preferred =
-      voices.find((v) => v.name.includes('Google UK English Female')) ||
-      voices.find((v) => v.name.includes('Samantha')) ||
-      voices.find((v) => v.name.includes('Karen')) ||
-      voices.find((v) => v.name.includes('Victoria')) ||
-      voices.find((v) => v.lang.startsWith('en-GB')) ||
-      voices.find((v) => v.lang.startsWith('en'));
+      if (!res.ok) throw new Error('TTS failed');
 
-    if (preferred) utterance.voice = preferred;
-    utterance.rate = 0.92;
-    utterance.pitch = 1.05;
-    utterance.volume = 1;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
 
-    utterance.onstart = () => {
-      setCallState('speaking');
-      setStatusText('Speaking');
-    };
-
-    utterance.onend = () => {
-      if (callStateRef.current !== 'ended') {
-        if (onDone) {
-          onDone();
-        } else {
-          startListening();
+      const handleDone = () => {
+        URL.revokeObjectURL(url);
+        audioRef.current = null;
+        if (callStateRef.current !== 'ended') {
+          if (onDone) onDone();
+          else startListening();
         }
-      }
-    };
+      };
 
-    utterance.onerror = () => {
-      if (callStateRef.current !== 'ended') {
-        if (onDone) onDone();
-        else startListening();
-      }
-    };
+      audio.onended = handleDone;
+      audio.onerror = handleDone;
+      await audio.play();
 
-    // iOS Safari fix: slight delay
-    setTimeout(() => {
+    } catch (err) {
+      console.error('TTS error, falling back to browser voice:', err);
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.92;
+      utterance.onend = () => {
+        if (callStateRef.current !== 'ended') {
+          if (onDone) onDone();
+          else startListening();
+        }
+      };
       window.speechSynthesis.speak(utterance);
-    }, 100);
+    }
   }, []);
 
   // ─── Send to Groq ───────────────────────────────────────────────────────

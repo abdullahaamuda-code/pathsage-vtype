@@ -18,7 +18,7 @@ interface Message {
   content: string;
 }
 
-// ─── Browser compatibility check ────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getSpeechRecognition(): any {
   if (typeof window === 'undefined') return null;
@@ -29,19 +29,24 @@ function getSpeechRecognition(): any {
   );
 }
 
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
 // ─── Web Audio Ringtone ──────────────────────────────────────────────────────
 
 function createRingtone(): { stop: () => void } | null {
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-
-    const playBeep = (startTime: number, freq = 520) => {
+    const playBeep = (startTime: number) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.type = 'sine';
-      osc.frequency.value = freq;
+      osc.frequency.value = 520;
       gain.gain.setValueAtTime(0, startTime);
       gain.gain.linearRampToValueAtTime(0.25, startTime + 0.05);
       gain.gain.setValueAtTime(0.25, startTime + 0.35);
@@ -49,61 +54,32 @@ function createRingtone(): { stop: () => void } | null {
       osc.start(startTime);
       osc.stop(startTime + 0.5);
     };
-
-    // Nigerian-style double ring pattern: ring-ring ... pause ... ring-ring
-    const schedulePattern = (offset: number) => {
-      playBeep(offset + 0.0, 520);
-      playBeep(offset + 0.0, 660); // harmony
-      playBeep(offset + 0.6, 520);
-      playBeep(offset + 0.6, 660);
+    const schedule = (offset: number) => {
+      playBeep(offset);
+      playBeep(offset + 0.6);
     };
-
-    schedulePattern(0.1);
-    schedulePattern(2.3);
-    schedulePattern(4.5);
-
-    return {
-      stop: () => {
-        try {
-          ctx.close();
-        } catch {}
-      },
-    };
+    schedule(0.1);
+    schedule(2.2);
+    schedule(4.3);
+    return { stop: () => { try { ctx.close(); } catch {} } };
   } catch {
     return null;
   }
-}
-
-// ─── Format time ────────────────────────────────────────────────────────────
-
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-    .toString()
-    .padStart(2, '0');
-  const s = (seconds % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
 }
 
 // ─── Orb Component ──────────────────────────────────────────────────────────
 
 function Orb({ state }: { state: CallState }) {
   const orbClass = {
-    idle: 'orb-idle',
-    ringing: 'orb-ringing',
-    connected: 'orb-idle',
-    listening: 'orb-listening',
-    thinking: 'orb-thinking',
-    speaking: 'orb-speaking',
-    ended: '',
+    idle: 'orb-idle', ringing: 'orb-ringing', connected: 'orb-idle',
+    listening: 'orb-listening', thinking: 'orb-thinking',
+    speaking: 'orb-speaking', ended: '',
   }[state];
 
   const borderColor = {
-    idle: 'border-emerald-700',
-    ringing: 'border-emerald-500',
-    connected: 'border-emerald-600',
-    listening: 'border-emerald-400',
-    thinking: 'border-emerald-600',
-    speaking: 'border-emerald-400',
+    idle: 'border-emerald-700', ringing: 'border-emerald-500',
+    connected: 'border-emerald-600', listening: 'border-emerald-400',
+    thinking: 'border-emerald-600', speaking: 'border-emerald-400',
     ended: 'border-zinc-700',
   }[state];
 
@@ -119,57 +95,26 @@ function Orb({ state }: { state: CallState }) {
 
   return (
     <div className="relative flex items-center justify-center" style={{ width: 180, height: 180 }}>
-      {/* Ripple rings — only when speaking */}
       {state === 'speaking' && (
         <>
-          <div
-            className="ripple-ring absolute rounded-full border border-emerald-500"
-            style={{ width: 180, height: 180, opacity: 0 }}
-          />
-          <div
-            className="ripple-ring-delayed absolute rounded-full border border-emerald-500"
-            style={{ width: 180, height: 180, opacity: 0 }}
-          />
-          <div
-            className="ripple-ring-delayed-2 absolute rounded-full border border-emerald-500"
-            style={{ width: 180, height: 180, opacity: 0 }}
-          />
+          <div className="ripple-ring absolute rounded-full border border-emerald-500" style={{ width: 180, height: 180, opacity: 0 }} />
+          <div className="ripple-ring-delayed absolute rounded-full border border-emerald-500" style={{ width: 180, height: 180, opacity: 0 }} />
+          <div className="ripple-ring-delayed-2 absolute rounded-full border border-emerald-500" style={{ width: 180, height: 180, opacity: 0 }} />
         </>
       )}
-
-      {/* Thinking spinner ring */}
       {state === 'thinking' && (
-        <div
-          className="thinking-spinner absolute rounded-full"
-          style={{
-            width: 196,
-            height: 196,
-            background:
-              'conic-gradient(from 0deg, transparent 0%, #10b981 25%, transparent 50%, transparent 100%)',
-            borderRadius: '50%',
-            padding: 2,
-          }}
-        />
+        <div className="thinking-spinner absolute rounded-full" style={{ width: 196, height: 196, background: 'conic-gradient(from 0deg, transparent 0%, #10b981 25%, transparent 50%, transparent 100%)', borderRadius: '50%', padding: 2 }} />
       )}
-
-      {/* Main orb */}
       <div
         className={`orb-base ${orbClass} ${borderColor} rounded-full border-2 bg-gradient-to-br ${bgGradient} flex items-center justify-center`}
         style={{ width: 180, height: 180 }}
       >
-        {/* Inner glow dot */}
-        <div
-          className={`rounded-full transition-all duration-500 ${
-            state === 'listening'
-              ? 'bg-emerald-400 opacity-80'
-              : state === 'speaking'
-              ? 'bg-emerald-300 opacity-90'
-              : state === 'thinking'
-              ? 'bg-emerald-600 opacity-60'
-              : 'bg-emerald-700 opacity-40'
-          }`}
-          style={{ width: 24, height: 24 }}
-        />
+        <div className={`rounded-full transition-all duration-500 ${
+          state === 'listening' ? 'bg-emerald-400 opacity-80' :
+          state === 'speaking' ? 'bg-emerald-300 opacity-90' :
+          state === 'thinking' ? 'bg-emerald-600 opacity-60' :
+          'bg-emerald-700 opacity-40'
+        }`} style={{ width: 24, height: 24 }} />
       </div>
     </div>
   );
@@ -190,74 +135,75 @@ export default function PathSagePage() {
   const messagesRef = useRef<Message[]>([]);
   const recognitionRef = useRef<any>(null);
   const ringtoneRef = useRef<{ stop: () => void } | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const callStateRef = useRef<CallState>('idle');
   const finalTranscriptRef = useRef('');
-  const audioUnlockedRef = useRef(false);
-  // Keep ref in sync with state
-  useEffect(() => {
-    callStateRef.current = callState;
-  }, [callState]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
-  // Check browser support
+  useEffect(() => { callStateRef.current = callState; }, [callState]);
+
   useEffect(() => {
     const SR = getSpeechRecognition();
-    if (!SR) {
-      setIsSupported(false);
-    }
+    if (!SR) setIsSupported(false);
   }, []);
 
   // Timer
   useEffect(() => {
-    if (callState === 'connected' || callState === 'listening' || callState === 'thinking' || callState === 'speaking') {
-      timerRef.current = setInterval(() => {
-        setCallDuration((d) => d + 1);
-      }, 1000);
+    if (['connected', 'listening', 'thinking', 'speaking'].includes(callState)) {
+      timerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [callState]);
 
-  // ─── Speech via Groq Orpheus TTS ────────────────────────────────────────
-
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  // Unlock audio on mobile — must be called inside a user gesture (tap)
-  const unlockAudio = useCallback(() => {
-    if (audioUnlockedRef.current) return;
+  // ─── Unlock audio context on mobile ────────────────────────────────────
+  // Must be called directly inside a tap/click handler — not inside async/await
+  const unlockAudioContext = useCallback(() => {
     try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const buf = ctx.createBuffer(1, 1, 22050);
-      const src = ctx.createBufferSource();
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioCtx();
+      }
+      if (audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume();
+      }
+      // Play silent buffer to fully unlock on iOS
+      const buf = audioCtxRef.current.createBuffer(1, 1, 22050);
+      const src = audioCtxRef.current.createBufferSource();
       src.buffer = buf;
-      src.connect(ctx.destination);
+      src.connect(audioCtxRef.current.destination);
       src.start(0);
-      setTimeout(() => ctx.close(), 100);
-      audioUnlockedRef.current = true;
-    } catch {}
+    } catch (e) {
+      console.log('Audio unlock error (non-fatal):', e);
+    }
   }, []);
 
+  // ─── Speak via Groq TTS ─────────────────────────────────────────────────
   const speak = useCallback(async (text: string, onDone?: () => void) => {
-    // Stop any playing audio
     if (audioRef.current) {
       audioRef.current.pause();
+      audioRef.current.src = '';
       audioRef.current = null;
     }
 
     setCallState('speaking');
     setStatusText('Speaking');
 
-    const handleFallback = () => {
+    const fallback = () => {
+      if (callStateRef.current === 'ended') return;
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.92;
+      utterance.pitch = 1.05;
+      const voices = window.speechSynthesis.getVoices();
+      const best = voices.find(v => v.name.includes('Google UK English Female'))
+        || voices.find(v => v.lang.startsWith('en'));
+      if (best) utterance.voice = best;
       utterance.onend = () => {
         if (callStateRef.current !== 'ended') {
-          if (onDone) onDone();
-          else startListening();
+          if (onDone) onDone(); else startListening();
         }
       };
       window.speechSynthesis.speak(utterance);
@@ -271,115 +217,108 @@ export default function PathSagePage() {
       });
 
       if (!res.ok) {
-        console.error('TTS failed with status:', res.status);
-        handleFallback();
+        console.error('TTS route returned', res.status);
+        fallback();
         return;
       }
 
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
+      const arrayBuffer = await res.arrayBuffer();
 
-      const handleDone = () => {
-        URL.revokeObjectURL(url);
-        audioRef.current = null;
-        if (callStateRef.current !== 'ended') {
-          if (onDone) onDone();
-          else startListening();
-        }
-      };
+      // Use AudioContext to decode and play — works on Android + iOS
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        const ctx = audioCtxRef.current || new AudioCtx();
+        audioCtxRef.current = ctx;
 
-      audio.onended = handleDone;
-      audio.onerror = () => {
-        console.error('Audio playback error, falling back');
-        handleFallback();
-      };
+        if (ctx.state === 'suspended') await ctx.resume();
 
-      // Mobile requires explicit user-gesture-unlocked play
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {
-          console.error('audio.play() blocked, falling back');
-          handleFallback();
-        });
+        const decoded = await ctx.decodeAudioData(arrayBuffer);
+        const source = ctx.createBufferSource();
+        source.buffer = decoded;
+        source.connect(ctx.destination);
+
+        source.onended = () => {
+          if (callStateRef.current !== 'ended') {
+            if (onDone) onDone(); else startListening();
+          }
+        };
+
+        source.start(0);
+      } catch (decodeErr) {
+        console.error('AudioContext decode failed, trying Audio element:', decodeErr);
+        // Fallback to Audio element
+        const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          audioRef.current = null;
+          if (callStateRef.current !== 'ended') {
+            if (onDone) onDone(); else startListening();
+          }
+        };
+        audio.onerror = () => { URL.revokeObjectURL(url); fallback(); };
+        await audio.play();
       }
 
     } catch (err) {
-      console.error('TTS error, falling back:', err);
-      handleFallback();
+      console.error('TTS fetch error:', err);
+      fallback();
     }
   }, []);
 
-  // ─── Send to Groq ───────────────────────────────────────────────────────
+  // ─── Send to Groq chat ──────────────────────────────────────────────────
+  const sendToGroq = useCallback(async (userText: string) => {
+    if (!userText.trim()) { startListening(); return; }
 
-  const sendToGroq = useCallback(
-    async (userText: string) => {
-      if (!userText.trim()) {
-        startListening();
-        return;
-      }
+    const userMessage: Message = { role: 'user', content: userText };
+    messagesRef.current = [...messagesRef.current, userMessage];
 
-      const userMessage: Message = { role: 'user', content: userText };
-      messagesRef.current = [...messagesRef.current, userMessage];
+    setCallState('thinking');
+    setStatusText('Thinking');
+    setTranscript('');
+    setAiText('');
 
-      setCallState('thinking');
-      setStatusText('Thinking');
-      setTranscript('');
-      setAiText('');
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: messagesRef.current }),
+      });
 
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: messagesRef.current }),
-        });
+      const data = await res.json();
+      if (!data.reply) throw new Error('No reply');
 
-        const data = await res.json();
+      messagesRef.current = [...messagesRef.current, { role: 'assistant', content: data.reply }];
+      setAiText(data.reply);
+      speak(data.reply);
+    } catch (err) {
+      console.error('Groq error:', err);
+      const fallbackMsg = 'Sorry, I had a connection issue. Could you say that again?';
+      setAiText(fallbackMsg);
+      speak(fallbackMsg);
+    }
+  }, [speak]);
 
-        if (!data.reply) throw new Error('No reply');
-
-        const assistantMessage: Message = {
-          role: 'assistant',
-          content: data.reply,
-        };
-        messagesRef.current = [...messagesRef.current, assistantMessage];
-
-        setAiText(data.reply);
-        speak(data.reply);
-      } catch (err) {
-        console.error('Groq error:', err);
-        setAiText("Sorry, I had a connection issue. Please try again.");
-        speak("Sorry, I had a connection issue. Please try again.");
-      }
-    },
-    [speak]
-  );
-
-  // ─── Speech recognition ─────────────────────────────────────────────────
-
+  // ─── Start listening ────────────────────────────────────────────────────
   const startListening = useCallback(() => {
     if (callStateRef.current === 'ended') return;
 
     const SR = getSpeechRecognition();
     if (!SR) return;
 
-    // If AI is speaking, cancel it first
     window.speechSynthesis.cancel();
 
     if (recognitionRef.current) {
-      try {
-        recognitionRef.current.abort();
-      } catch {}
+      try { recognitionRef.current.abort(); } catch {}
     }
 
     const recognition = new SR();
     recognitionRef.current = recognition;
-
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = 'en-NG';
-
     finalTranscriptRef.current = '';
 
     recognition.onstart = () => {
@@ -393,47 +332,34 @@ export default function PathSagePage() {
 
     recognition.onresult = (event: any) => {
       if (callStateRef.current === 'ended') return;
-
-      clearTimeout(silenceTimerRef.current!);
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 
       let interim = '';
       let final = '';
-
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          final += result[0].transcript;
-        } else {
-          interim += result[0].transcript;
-        }
+        if (event.results[i].isFinal) final += event.results[i][0].transcript;
+        else interim += event.results[i][0].transcript;
       }
-
       if (final) finalTranscriptRef.current += final;
-      const displayText = finalTranscriptRef.current + interim;
-      setTranscript(displayText);
+      setTranscript(finalTranscriptRef.current + interim);
 
-      // Silence detection: 1.5s after last word
       silenceTimerRef.current = setTimeout(() => {
-        if (callStateRef.current === 'listening') {
-          recognition.stop();
-        }
+        if (callStateRef.current === 'listening') recognition.stop();
       }, 1500);
     };
 
     recognition.onend = () => {
-      clearTimeout(silenceTimerRef.current!);
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (callStateRef.current === 'ended') return;
-
       const text = finalTranscriptRef.current.trim();
       if (text) {
         sendToGroq(text);
       } else {
-        // Nothing heard — restart listening
         setTimeout(() => {
-          if (callStateRef.current !== 'ended' && callStateRef.current !== 'thinking' && callStateRef.current !== 'speaking') {
+          if (!['ended', 'thinking', 'speaking'].includes(callStateRef.current)) {
             startListening();
           }
-        }, 500);
+        }, 600);
       }
     };
 
@@ -444,26 +370,36 @@ export default function PathSagePage() {
         endCall();
         return;
       }
-      // For other errors, restart
-      if (callStateRef.current !== 'ended' && callStateRef.current !== 'thinking' && callStateRef.current !== 'speaking') {
+      if (!['ended', 'thinking', 'speaking'].includes(callStateRef.current)) {
         setTimeout(() => startListening(), 1000);
       }
     };
 
-    try {
-      recognition.start();
-    } catch (err) {
-      console.error('Failed to start recognition:', err);
-    }
+    try { recognition.start(); } catch (err) { console.error('recognition.start() failed:', err); }
   }, [sendToGroq]);
 
-  // ─── Call lifecycle ─────────────────────────────────────────────────────
+  // ─── End call ───────────────────────────────────────────────────────────
+  const endCall = useCallback(() => {
+    if (callStateRef.current === 'ended') return;
+    setEndedDuration(formatTime(callDuration));
 
+    if (ringtoneRef.current) { ringtoneRef.current.stop(); ringtoneRef.current = null; }
+    window.speechSynthesis.cancel();
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    if (recognitionRef.current) { try { recognitionRef.current.abort(); } catch {} recognitionRef.current = null; }
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    if (timerRef.current) clearInterval(timerRef.current);
+
+    setCallState('ended');
+    setStatusText('');
+  }, [callDuration]);
+
+  // ─── Start call ─────────────────────────────────────────────────────────
   const startCall = useCallback(() => {
     if (callState !== 'idle') return;
 
-    // Unlock audio on mobile — must happen inside tap gesture
-    unlockAudio();
+    // MUST unlock audio here — directly in click handler before any async
+    unlockAudioContext();
 
     setCallState('ringing');
     setCallDuration(0);
@@ -473,56 +409,20 @@ export default function PathSagePage() {
     setMicError('');
     messagesRef.current = [];
 
-    // Play ringtone
     ringtoneRef.current = createRingtone();
 
-    // Connect after 2.8s
     setTimeout(() => {
       if (callStateRef.current !== 'ringing') return;
-
-      if (ringtoneRef.current) {
-        ringtoneRef.current.stop();
-        ringtoneRef.current = null;
-      }
+      if (ringtoneRef.current) { ringtoneRef.current.stop(); ringtoneRef.current = null; }
 
       setCallState('connected');
       setStatusText('Connected');
 
-      // AI speaks first
-      const greeting =
-        "Hello! I'm your PathSage mentor. What would you like help with today?";
+      const greeting = "Hello! I'm your PathSage mentor. What would you like help with today?";
       setAiText(greeting);
       speak(greeting);
     }, 2800);
-  }, [callState, speak]);
-
-  const endCall = useCallback(() => {
-    if (callStateRef.current === 'ended') return;
-
-    const duration = formatTime(callDuration);
-    setEndedDuration(duration);
-
-    // Stop everything
-    if (ringtoneRef.current) {
-      ringtoneRef.current.stop();
-      ringtoneRef.current = null;
-    }
-
-    window.speechSynthesis.cancel();
-
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.abort();
-      } catch {}
-      recognitionRef.current = null;
-    }
-
-    clearTimeout(silenceTimerRef.current!);
-    clearInterval(timerRef.current!);
-
-    setCallState('ended');
-    setStatusText('');
-  }, [callDuration]);
+  }, [callState, speak, unlockAudioContext]);
 
   const resetCall = useCallback(() => {
     setCallState('idle');
@@ -536,177 +436,98 @@ export default function PathSagePage() {
     finalTranscriptRef.current = '';
   }, []);
 
-  // ─── Interrupt AI speaking ───────────────────────────────────────────────
-
   const handleInterrupt = useCallback(() => {
     if (callState === 'speaking') {
       window.speechSynthesis.cancel();
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
       startListening();
     }
   }, [callState, startListening]);
 
   // ─── Unsupported browser ─────────────────────────────────────────────────
-
   if (!isSupported) {
     return (
-      <div
-        style={{ background: '#080808', minHeight: '100dvh' }}
-        className="flex flex-col items-center justify-center gap-6 px-8 text-center"
-      >
-        <div
-          className="rounded-full border border-amber-700 bg-amber-950 flex items-center justify-center"
-          style={{ width: 80, height: 80, fontSize: 36 }}
-        >
-          ⚠️
-        </div>
+      <div style={{ background: '#080808', minHeight: '100dvh' }} className="flex flex-col items-center justify-center gap-6 px-8 text-center">
+        <div className="rounded-full border border-amber-700 bg-amber-950 flex items-center justify-center" style={{ width: 80, height: 80, fontSize: 36 }}>⚠️</div>
         <div>
-          <p className="text-zinc-200 text-lg font-medium mb-2" style={{ fontFamily: 'var(--font-dm-sans)' }}>
-            Chrome Required
-          </p>
-          <p className="text-zinc-500 text-sm leading-relaxed" style={{ fontFamily: 'var(--font-dm-sans)' }}>
-            PathSage Voice uses the Web Speech API, which only works in Chrome or Edge. Please open this page in Chrome.
-          </p>
+          <p className="text-zinc-200 text-lg font-medium mb-2" style={{ fontFamily: 'var(--font-dm-sans)' }}>Chrome Required</p>
+          <p className="text-zinc-500 text-sm leading-relaxed" style={{ fontFamily: 'var(--font-dm-sans)' }}>PathSage Voice uses the Web Speech API, which only works in Chrome or Edge. Please open this page in Chrome.</p>
         </div>
       </div>
     );
   }
 
-  // ─── Ended screen ────────────────────────────────────────────────────────
-
+  // ─── Ended screen ─────────────────────────────────────────────────────────
   if (callState === 'ended') {
     return (
-      <div
-        style={{ background: '#080808', minHeight: '100dvh' }}
-        className="ended-fade flex flex-col items-center justify-center gap-8 px-8 text-center"
-      >
+      <div style={{ background: '#080808', minHeight: '100dvh' }} className="ended-fade flex flex-col items-center justify-center gap-8 px-8 text-center">
         {micError ? (
           <>
-            <div className="text-4xl">🎙️</div>
+            <div style={{ fontSize: 40 }}>🎙️</div>
             <div>
-              <p className="text-zinc-200 text-base font-medium mb-2" style={{ fontFamily: 'var(--font-dm-sans)' }}>
-                Mic Access Needed
-              </p>
-              <p className="text-zinc-500 text-sm leading-relaxed" style={{ fontFamily: 'var(--font-dm-sans)' }}>
-                {micError}
-              </p>
+              <p className="text-zinc-200 text-base font-medium mb-2" style={{ fontFamily: 'var(--font-dm-sans)' }}>Mic Access Needed</p>
+              <p className="text-zinc-500 text-sm leading-relaxed" style={{ fontFamily: 'var(--font-dm-sans)' }}>{micError}</p>
             </div>
           </>
         ) : (
-          <>
-            <div className="flex flex-col items-center gap-3">
-              <div
-                className="rounded-full border border-zinc-700"
-                style={{ width: 64, height: 64, background: '#111' }}
-              />
-              <div>
-                <p className="text-zinc-400 text-xs tracking-widest uppercase mb-1" style={{ fontFamily: 'var(--font-dm-mono)' }}>
-                  Call Ended
-                </p>
-                <p className="text-zinc-200 text-3xl font-light" style={{ fontFamily: 'var(--font-dm-mono)' }}>
-                  {endedDuration}
-                </p>
-              </div>
+          <div className="flex flex-col items-center gap-3">
+            <div className="rounded-full border border-zinc-700" style={{ width: 64, height: 64, background: '#111' }} />
+            <div>
+              <p className="text-zinc-400 text-xs tracking-widest uppercase mb-1" style={{ fontFamily: 'var(--font-dm-mono)' }}>Call Ended</p>
+              <p className="text-zinc-200 text-3xl font-light" style={{ fontFamily: 'var(--font-dm-mono)' }}>{endedDuration}</p>
             </div>
-          </>
+          </div>
         )}
-
-        <button
-          onClick={resetCall}
-          className="rounded-full px-8 py-3 text-sm font-medium text-zinc-200 border border-zinc-700 hover:border-zinc-500 transition-colors"
-          style={{ fontFamily: 'var(--font-dm-sans)', background: '#111' }}
-        >
+        <button onClick={resetCall} className="rounded-full px-8 py-3 text-sm font-medium text-zinc-200 border border-zinc-700 hover:border-zinc-500 transition-colors" style={{ fontFamily: 'var(--font-dm-sans)', background: '#111' }}>
           Call again
         </button>
       </div>
     );
   }
 
-  // ─── Idle screen ─────────────────────────────────────────────────────────
-
+  // ─── Idle screen ──────────────────────────────────────────────────────────
   if (callState === 'idle') {
     return (
-      <div
-        style={{ background: '#080808', minHeight: '100dvh' }}
-        className="flex flex-col items-center justify-center gap-10 px-8"
-      >
+      <div style={{ background: '#080808', minHeight: '100dvh' }} className="flex flex-col items-center justify-center gap-10 px-8">
         <div className="flex flex-col items-center gap-3 fade-up">
           <Orb state="idle" />
           <div className="text-center mt-2">
-            <p className="text-zinc-100 text-lg font-medium" style={{ fontFamily: 'var(--font-dm-sans)' }}>
-              PathSage
-            </p>
-            <p className="text-emerald-500 text-xs tracking-widest uppercase mt-1" style={{ fontFamily: 'var(--font-dm-mono)' }}>
-              ● Online
-            </p>
+            <p className="text-zinc-100 text-lg font-medium" style={{ fontFamily: 'var(--font-dm-sans)' }}>PathSage</p>
+            <p className="text-emerald-500 text-xs tracking-widest uppercase mt-1" style={{ fontFamily: 'var(--font-dm-mono)' }}>● Online</p>
           </div>
         </div>
-
         <div className="flex flex-col items-center gap-4 fade-up" style={{ animationDelay: '0.1s' }}>
-          <p className="text-zinc-500 text-sm text-center" style={{ fontFamily: 'var(--font-dm-sans)' }}>
-            Your AI academic mentor
-          </p>
-
-          {/* Green call button */}
+          <p className="text-zinc-500 text-sm text-center" style={{ fontFamily: 'var(--font-dm-sans)' }}>Your AI academic mentor</p>
           <button
             onClick={startCall}
-            className="rounded-full flex items-center justify-center shadow-lg hover:shadow-emerald-500/20 transition-all active:scale-95"
-            style={{
-              width: 80,
-              height: 80,
-              background: 'linear-gradient(135deg, #10b981, #059669)',
-              boxShadow: '0 0 30px rgba(16,185,129,0.25)',
-            }}
+            className="rounded-full flex items-center justify-center active:scale-95 transition-transform"
+            style={{ width: 80, height: 80, background: 'linear-gradient(135deg, #10b981, #059669)', boxShadow: '0 0 30px rgba(16,185,129,0.25)' }}
             aria-label="Start call"
           >
             <PhoneIcon />
           </button>
-
-          <p className="text-zinc-600 text-xs" style={{ fontFamily: 'var(--font-dm-mono)' }}>
-            tap to call
-          </p>
+          <p className="text-zinc-600 text-xs" style={{ fontFamily: 'var(--font-dm-mono)' }}>tap to call</p>
         </div>
       </div>
     );
   }
 
-  // ─── Active call screen ─────────────────────────────────────────────────
-
+  // ─── Active call screen ───────────────────────────────────────────────────
   return (
-    <div
-      style={{ background: '#080808', minHeight: '100dvh' }}
-      className="flex flex-col items-center justify-between py-12 px-6"
-      onClick={handleInterrupt}
-    >
-      {/* Top — name + timer */}
+    <div style={{ background: '#080808', minHeight: '100dvh' }} className="flex flex-col items-center justify-between py-12 px-6" onClick={handleInterrupt}>
       <div className="flex flex-col items-center gap-1 fade-up">
-        <p className="text-zinc-200 text-base font-medium" style={{ fontFamily: 'var(--font-dm-sans)' }}>
-          PathSage Mentor
-        </p>
-        <p
-          className="text-emerald-500 text-xs"
-          style={{ fontFamily: 'var(--font-dm-mono)' }}
-        >
+        <p className="text-zinc-200 text-base font-medium" style={{ fontFamily: 'var(--font-dm-sans)' }}>PathSage Mentor</p>
+        <p className="text-emerald-500 text-xs" style={{ fontFamily: 'var(--font-dm-mono)' }}>
           {callState === 'ringing' ? 'Calling...' : formatTime(callDuration)}
         </p>
       </div>
 
-      {/* Middle — orb + status */}
       <div className="flex flex-col items-center gap-6">
         <Orb state={callState} />
-
         <div className="flex flex-col items-center gap-3" style={{ minHeight: 60 }}>
-          {/* Status label */}
           <div className="status-pulse">
-            {callState === 'ringing' && (
-              <p className="text-zinc-400 text-sm" style={{ fontFamily: 'var(--font-dm-sans)' }}>
-                Calling AI Mentor...
-              </p>
-            )}
-            {callState === 'listening' && (
-              <p className="text-emerald-400 text-sm" style={{ fontFamily: 'var(--font-dm-sans)' }}>
-                Listening
-              </p>
-            )}
+            {callState === 'ringing' && <p className="text-zinc-400 text-sm" style={{ fontFamily: 'var(--font-dm-sans)' }}>Calling AI Mentor...</p>}
+            {callState === 'listening' && <p className="text-emerald-400 text-sm" style={{ fontFamily: 'var(--font-dm-sans)' }}>Listening</p>}
             {callState === 'thinking' && (
               <div className="flex items-center gap-1">
                 <span className="dot-1 inline-block w-1.5 h-1.5 rounded-full bg-zinc-400" />
@@ -714,58 +535,30 @@ export default function PathSagePage() {
                 <span className="dot-3 inline-block w-1.5 h-1.5 rounded-full bg-zinc-400" />
               </div>
             )}
-            {callState === 'speaking' && (
-              <p className="text-emerald-300 text-sm" style={{ fontFamily: 'var(--font-dm-sans)' }}>
-                Speaking
-              </p>
-            )}
-            {callState === 'connected' && (
-              <p className="text-zinc-500 text-sm" style={{ fontFamily: 'var(--font-dm-sans)' }}>
-                Connected
-              </p>
-            )}
+            {callState === 'speaking' && <p className="text-emerald-300 text-sm" style={{ fontFamily: 'var(--font-dm-sans)' }}>Speaking</p>}
+            {callState === 'connected' && <p className="text-zinc-500 text-sm" style={{ fontFamily: 'var(--font-dm-sans)' }}>Connected</p>}
           </div>
-
-          {/* Transcript / AI text */}
           {(transcript || aiText) && (
-            <div
-              className="text-fade text-center px-4 max-w-xs"
-              style={{ maxHeight: 120, overflow: 'hidden' }}
-            >
+            <div className="text-fade text-center px-4 max-w-xs" style={{ maxHeight: 120, overflow: 'hidden' }}>
               {callState === 'listening' && transcript && (
-                <p className="text-zinc-300 text-sm leading-relaxed" style={{ fontFamily: 'var(--font-dm-sans)' }}>
-                  {transcript}
-                </p>
+                <p className="text-zinc-300 text-sm leading-relaxed" style={{ fontFamily: 'var(--font-dm-sans)' }}>{transcript}</p>
               )}
               {(callState === 'speaking' || callState === 'thinking') && aiText && (
-                <p className="text-zinc-400 text-sm leading-relaxed italic" style={{ fontFamily: 'var(--font-dm-sans)' }}>
-                  {aiText}
-                </p>
+                <p className="text-zinc-400 text-sm leading-relaxed italic" style={{ fontFamily: 'var(--font-dm-sans)' }}>{aiText}</p>
               )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Bottom — end call button */}
       <div className="flex flex-col items-center gap-3">
         {callState === 'speaking' && (
-          <p className="text-zinc-600 text-xs" style={{ fontFamily: 'var(--font-dm-mono)' }}>
-            tap screen to interrupt
-          </p>
+          <p className="text-zinc-600 text-xs" style={{ fontFamily: 'var(--font-dm-mono)' }}>tap to interrupt</p>
         )}
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            endCall();
-          }}
-          className="rounded-full flex items-center justify-center transition-all active:scale-95"
-          style={{
-            width: 72,
-            height: 72,
-            background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-            boxShadow: '0 0 24px rgba(239,68,68,0.2)',
-          }}
+          onClick={(e) => { e.stopPropagation(); endCall(); }}
+          className="rounded-full flex items-center justify-center active:scale-95 transition-transform"
+          style={{ width: 72, height: 72, background: 'linear-gradient(135deg, #ef4444, #dc2626)', boxShadow: '0 0 24px rgba(239,68,68,0.2)' }}
           aria-label="End call"
         >
           <PhoneOffIcon />
@@ -774,8 +567,6 @@ export default function PathSagePage() {
     </div>
   );
 }
-
-// ─── Icons ───────────────────────────────────────────────────────────────────
 
 function PhoneIcon() {
   return (

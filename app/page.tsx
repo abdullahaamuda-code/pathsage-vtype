@@ -20,7 +20,7 @@ interface Message {
 
 // ─── Browser compatibility check ────────────────────────────────────────────
 
-function getSpeechRecognition(): typeof window.SpeechRecognition | null {
+function getSpeechRecognition(): any {
   if (typeof window === 'undefined') return null;
   return (
     (window as any).SpeechRecognition ||
@@ -188,7 +188,7 @@ export default function PathSagePage() {
   const [endedDuration, setEndedDuration] = useState('');
 
   const messagesRef = useRef<Message[]>([]);
-  const recognitionRef = useRef<InstanceType<typeof window.SpeechRecognition> | null>(null);
+  const recognitionRef = useRef<any>(null);
   const ringtoneRef = useRef<{ stop: () => void } | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -364,7 +364,7 @@ export default function PathSagePage() {
       }
     };
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
+    recognition.onresult = (event: any) => {
       if (callStateRef.current === 'ended') return;
 
       clearTimeout(silenceTimerRef.current!);
@@ -410,7 +410,7 @@ export default function PathSagePage() {
       }
     };
 
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+    recognition.onerror = (event: any) => {
       console.error('SpeechRecognition error:', event.error);
       if (event.error === 'not-allowed') {
         setMicError('Microphone access was denied. Please allow mic access and try again.');
